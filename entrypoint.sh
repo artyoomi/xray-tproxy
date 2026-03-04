@@ -24,7 +24,7 @@ SID="$(    printf '%s' "$VLESS_URL" | sed -n 's#.*[?&]sid=\([^&]*\).*#\1#p')"
 SPX="$(    printf '%s' "$VLESS_URL" | sed -n 's#.*[?&]spx=\([^&]*\).*#\1#p' | sed 's/%2F/\//g')"
 FLOW="$(   printf '%s' "$VLESS_URL" | sed -n 's#.*[?&]flow=\([^&]*\).*#\1#p')"
 
-[ -z "${FP:-}" ] && FP="firefox"
+[ -z "${FP:-}" ]  && FP="firefox"
 [ -z "${SPX:-}" ] && SPX="/"
 
 # ---- minimal validation ----
@@ -68,6 +68,12 @@ cat > "$CFG" <<EOF
       "listen": "0.0.0.0",
       "settings": { "allowTransparent": true, "timeout": 300 },
       "sniffing": { "enabled": true, "destOverride": ["http","tls"] }
+    },
+    {
+      "port": 1080,
+      "protocol": "socks",
+      "listen": "0.0.0.0",
+      "settings": { "auth": "noauth", "udp": true }
     }
   ],
   "outbounds": [

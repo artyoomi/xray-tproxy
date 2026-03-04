@@ -1,16 +1,17 @@
-# VLESS-to-HTTP
+# VLESS-to-HTTP/SOCKS5 proxy
 
-A lightweight Dockerized **HTTP proxy** that forwards traffic through a **VLESS + Reality** server.
+A lightweight Dockerized **HTTP/HTTPS + SOCKS5 proxy** that forwards traffic through a **VLESS + Reality** server.
 Designed for simplicity: paste your VLESS link into `vless.conf`, run Docker, and you're done.
 
 ---
 
 ## ✨ Features
 - VLESS + Reality client (Xray-core)
-- HTTP proxy inbound (use with curl, browsers, apps)
+- HTTP proxy inbound (works for HTTP and HTTPS via CONNECT)
+- SOCKS5 proxy inbound
 - Auto-generated and printed `config.json` (easy debugging)
 - Minimal footprint, no host dependencies besides Docker
-- Default host port **9000** (change in `docker-compose.yml`)
+- Default host ports: **9000** (HTTP/HTTPS) and **1080** (SOCKS5), configurable in `docker-compose.yml`
 
 ---
 ## Related Projects
@@ -65,19 +66,27 @@ Logs (shows the generated config and Xray output):
 docker logs -f vless-to-http
 ```
 
-The HTTP proxy will be available on **http://127.0.0.1:9000** by default.
+By default:
+- HTTP/HTTPS proxy: **http://127.0.0.1:9000**
+- SOCKS5 proxy: **socks5://127.0.0.1:1080**
 
 ---
 
 ## 🧪 Test
+HTTP proxy (HTTPS target via CONNECT):
 ```bash
 curl -x http://127.0.0.1:9000 https://api.ipify.org -m 10 -v
 ```
-Expected: your VLESS server’s egress IP.
+Expected: your VLESS server's egress IP.
 
 Test plain HTTP (no TLS):
 ```bash
 curl -x http://127.0.0.1:9000 http://neverssl.com -m 10 -v
+```
+
+Test SOCKS5:
+```bash
+curl --socks5-hostname 127.0.0.1:1080 https://api.ipify.org -m 10 -v
 ```
 
 ---
