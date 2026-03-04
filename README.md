@@ -1,3 +1,6 @@
+[![Xray Core](https://img.shields.io/badge/Xray-Core-00BFFF?style=for-the-badge)](https://github.com/XTLS/Xray-core)
+
+
 # VLESS-to-HTTP/SOCKS5 proxy
 
 A lightweight Dockerized **HTTP/HTTPS + SOCKS5 proxy** that forwards traffic through a **VLESS + Reality** server.
