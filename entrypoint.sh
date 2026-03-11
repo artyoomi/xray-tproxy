@@ -23,9 +23,16 @@ FP="$(     printf '%s' "$VLESS_URL" | sed -n 's#.*[?&]fp=\([^&]*\).*#\1#p')"
 SID="$(    printf '%s' "$VLESS_URL" | sed -n 's#.*[?&]sid=\([^&]*\).*#\1#p')"
 SPX="$(    printf '%s' "$VLESS_URL" | sed -n 's#.*[?&]spx=\([^&]*\).*#\1#p' | sed 's/%2F/\//g')"
 FLOW="$(   printf '%s' "$VLESS_URL" | sed -n 's#.*[?&]flow=\([^&]*\).*#\1#p')"
+TYPE="$(   printf '%s' "$VLESS_URL" | sed -n 's#.*[?&]type=\([^&]*\).*#\1#p')"
+PATH_RAW="$(printf '%s' "$VLESS_URL" | sed -n 's#.*[?&]path=\([^&]*\).*#\1#p')"
+HOST_RAW="$(printf '%s' "$VLESS_URL" | sed -n 's#.*[?&]host=\([^&]*\).*#\1#p')"
+MODE="$(   printf '%s' "$VLESS_URL" | sed -n 's#.*[?&]mode=\([^&]*\).*#\1#p')"
 
 [ -z "${FP:-}" ]  && FP="firefox"
 [ -z "${SPX:-}" ] && SPX="/"
+[ -z "${TYPE:-}" ] && TYPE="tcp"
+XHTTP_PATH="$(printf '%s' "${PATH_RAW:-}" | sed 's/%2[Ff]/\//g')"
+HOST="$(printf '%s' "${HOST_RAW:-}" | sed 's/%2[Cc]/,/g')"
 
 # ---- minimal validation ----
 [ -n "${USER_ID:-}" ] || { echo "ERR: empty USER_ID"; exit 23; }
@@ -34,6 +41,19 @@ FLOW="$(   printf '%s' "$VLESS_URL" | sed -n 's#.*[?&]flow=\([^&]*\).*#\1#p')"
 [ -n "${PUBKEY:-}" ]  || { echo "ERR: empty PUBKEY";  exit 23; }
 [ -n "${SNI:-}" ]     || { echo "ERR: empty SNI";     exit 23; }
 [ -n "${SID:-}" ]     || { echo "ERR: empty SID";     exit 23; }
+
+case "$TYPE" in
+  tcp|xhttp) ;;
+  *)
+    echo "ERR: unsupported transport type '$TYPE' (supported: tcp, xhttp)" >&2
+    exit 23
+    ;;
+esac
+
+if [ "$TYPE" = "xhttp" ] && [ -z "${XHTTP_PATH:-}" ]; then
+  echo "ERR: empty PATH for xhttp transport" >&2
+  exit 23
+fi
 
 # ---- build user block safely (with/without flow) ----
 if [ -n "${FLOW:-}" ]; then
@@ -53,6 +73,59 @@ else
   "encryption": "none",
   "level": 0
 }
+JSON
+)
+fi
+
+if [ "$TYPE" = "xhttp" ]; then
+  XHTTP_HOST_LINE=""
+  XHTTP_MODE_LINE=""
+  if [ -n "${HOST:-}" ]; then
+    XHTTP_HOST_LINE=$(cat <<JSON
+,
+          "host": "${HOST}"
+JSON
+)
+  fi
+  if [ -n "${MODE:-}" ]; then
+    XHTTP_MODE_LINE=$(cat <<JSON
+,
+          "mode": "${MODE}"
+JSON
+)
+  fi
+  STREAM_SETTINGS_BLOCK=$(cat <<JSON
+      "streamSettings": {
+        "network": "xhttp",
+        "security": "reality",
+        "realitySettings": {
+          "show": false,
+          "publicKey": "${PUBKEY}",
+          "shortId": "${SID}",
+          "spiderX": "${SPX}",
+          "fingerprint": "${FP}",
+          "serverName": "${SNI}"
+        },
+        "xhttpSettings": {
+          "path": "${XHTTP_PATH}"${XHTTP_HOST_LINE}${XHTTP_MODE_LINE}
+        }
+      },
+JSON
+)
+else
+  STREAM_SETTINGS_BLOCK=$(cat <<JSON
+      "streamSettings": {
+        "network": "tcp",
+        "security": "reality",
+        "realitySettings": {
+          "show": false,
+          "publicKey": "${PUBKEY}",
+          "shortId": "${SID}",
+          "spiderX": "${SPX}",
+          "fingerprint": "${FP}",
+          "serverName": "${SNI}"
+        }
+      },
 JSON
 )
 fi
@@ -90,18 +163,7 @@ cat > "$CFG" <<EOF
           }
         ]
       },
-      "streamSettings": {
-        "network": "tcp",
-        "security": "reality",
-        "realitySettings": {
-          "show": false,
-          "publicKey": "${PUBKEY}",
-          "shortId": "${SID}",
-          "spiderX": "${SPX}",
-          "fingerprint": "${FP}",
-          "serverName": "${SNI}"
-        }
-      },
+${STREAM_SETTINGS_BLOCK}
       "tag": "proxy"
     },
     { "protocol": "freedom", "settings": {}, "tag": "direct" }

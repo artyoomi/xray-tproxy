@@ -15,6 +15,7 @@ Designed for simplicity: paste your VLESS link into `vless.conf`, run Docker, an
 
 ## ✨ Features
 - VLESS + Reality client (Xray-core)
+- Supports `tcp` and `xhttp` transports
 - HTTP proxy inbound (works for HTTP and HTTPS via CONNECT)
 - SOCKS5 proxy inbound
 - Auto-generated and printed `config.json` (easy debugging)
@@ -51,9 +52,20 @@ VLESS-to-HTTP/
 ## ⚙️ Configure
 Edit `vless.conf` and paste your full VLESS URL in one line:
 
-```
+TCP example:
+```bash
 vless://UUID@HOST:PORT?security=reality&encryption=none&pbk=PUBLIC_KEY&fp=fingerprint&sni=servername&sid=shortid&spx=/&flow=xtls-rprx-vision
 ```
+
+XHTTP example:
+```bash
+vless://UUID@HOST:PORT?security=reality&encryption=none&type=xhttp&path=%2Fmy-path&host=example.com&sni=example.com&pbk=PUBLIC_KEY&sid=SHORT_ID&fp=chrome&mode=auto
+```
+
+Supported transport query parameters:
+- `type=tcp` or `type=xhttp` (`tcp` is the default if omitted)
+- For `xhttp`, `path` is required
+- For `xhttp`, `host` and `mode` are optional
 
 Example:
 ```
@@ -115,6 +127,8 @@ docker compose up -d --build
   - `vless.conf` missing or has empty/invalid mandatory parameters.
 - **HTTP returns 503**
   - Usually your VLESS parameters are incorrect (pbk/sid/sni/flow).
+- **Container exits with `ERR: empty PATH for xhttp transport`**
+  - Add `path=...` to the VLESS URL when `type=xhttp`.
 - **TLS errors during CONNECT**
   - Verify `flow`, `fp` (fingerprint), `sni`, `pbk`, `sid` match your server.
 - View the generated config section in logs between:
