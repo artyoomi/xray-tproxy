@@ -1,0 +1,22 @@
+networks:
+  tproxy-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.5.5.0/24
+
+services:
+  xray-tproxy:
+    container_name: xray-tproxy
+    build: .
+    cap_add:
+      - NET_ADMIN
+    sysctls:
+      - net.ipv4.ip_forward=1
+      - net.ipv4.conf.all.route_localnet=1
+    volumes:
+      - ./vless.conf:/app/vless.conf:ro
+    networks:
+      tproxy-net:
+        ipv4_address: 172.5.5.2
+    restart: unless-stopped

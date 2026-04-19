@@ -13,5 +13,5 @@ RUN curl -L -o /tmp/xray.zip https://github.com/XTLS/Xray-core/releases/download
 
 COPY entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh
-EXPOSE 8080
+
 CMD ["/app/entrypoint.sh"]

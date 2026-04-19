@@ -55,6 +55,11 @@ if [ "$TYPE" = "xhttp" ] && [ -z "${XHTTP_PATH:-}" ]; then
   exit 23
 fi
 
+# Upstream used by dns-in dokodemo (must match nft OUTPUT bypass rules).
+DNS_UPSTREAM="${DNS_UPSTREAM:-1.1.1.1}"
+# SO_MARK on Xray outbounds so nft OUTPUT redirect skips them (avoids redirect loops).
+XRAY_SO_MARK="${XRAY_SO_MARK:-255}"
+
 # ---- build user block safely (with/without flow) ----
 if [ -n "${FLOW:-}" ]; then
   USER_BLOCK=$(cat <<JSON
@@ -108,7 +113,8 @@ JSON
         },
         "xhttpSettings": {
           "path": "${XHTTP_PATH}"${XHTTP_HOST_LINE}${XHTTP_MODE_LINE}
-        }
+        },
+        "sockopt": { "mark": ${XRAY_SO_MARK} }
       },
 JSON
 )
@@ -124,7 +130,8 @@ else
           "spiderX": "${SPX}",
           "fingerprint": "${FP}",
           "serverName": "${SNI}"
-        }
+        },
+        "sockopt": { "mark": ${XRAY_SO_MARK} }
       },
 JSON
 )
@@ -136,17 +143,30 @@ cat > "$CFG" <<EOF
   "log": { "loglevel": "debug" },
   "inbounds": [
     {
-      "port": 8080,
-      "protocol": "http",
-      "listen": "0.0.0.0",
-      "settings": { "allowTransparent": true, "timeout": 300 },
-      "sniffing": { "enabled": true, "destOverride": ["http","tls"] }
+      "tag": "tproxy-in",
+      "port": 12345,
+      "protocol": "dokodemo-door",
+      "settings": {
+        "network": "tcp,udp",
+        "followRedirect": true
+      },
+      "sniffing": {
+        "enabled": true,
+        "destOverride": ["http", "tls"]
+      },
+      "streamSettings": {
+        "sockopt": { "tproxy": "redirect" }
+      }
     },
     {
-      "port": 1080,
-      "protocol": "socks",
-      "listen": "0.0.0.0",
-      "settings": { "auth": "noauth", "udp": true }
+      "tag": "dns-in",
+      "port": 53,
+      "protocol": "dokodemo-door",
+      "settings": {
+        "address": "${DNS_UPSTREAM}",
+        "port": 53,
+        "network": "udp"
+      }
     }
   ],
   "outbounds": [
@@ -166,7 +186,12 @@ cat > "$CFG" <<EOF
 ${STREAM_SETTINGS_BLOCK}
       "tag": "proxy"
     },
-    { "protocol": "freedom", "settings": {}, "tag": "direct" }
+    {
+      "protocol": "freedom",
+      "settings": {},
+      "tag": "direct",
+      "streamSettings": { "sockopt": { "mark": ${XRAY_SO_MARK} } }
+    }
   ]
 }
 EOF
@@ -174,6 +199,49 @@ EOF
 # ---- print generated config for debugging ----
 echo "===== GENERATED CONFIG ====="
 cat "$CFG"
+echo "============================"
+
+echo ""
+echo "== NFTABLES (transparent REDIRECT, prerouting + output) =="
+
+# Drop policy-routing from older TPROXY-only setups (not used with REDIRECT).
+while ip rule del fwmark 1 table 100 2>/dev/null; do :; done
+ip route flush table 100 2>/dev/null || true
+
+nft delete table ip xray 2>/dev/null || true
+
+nft add table ip xray
+
+# Destinations that must not be redirected (loopback + VLESS server).
+nft add set ip xray no_tproxy '{ type ipv4_addr; flags interval; elements = { 127.0.0.0/8 } }'
+for _ip in $(getent ahosts "$SERVER" 2>/dev/null | awk '$1 ~ /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/ { print $1 }' | sort -u); do
+  nft add element ip xray no_tproxy "{ $_ip }" 2>/dev/null || true
+done
+
+# Ingress (published ports, forwarded) — same exclusions as output.
+nft add chain ip xray prerouting '{ type nat hook prerouting priority dstnat; policy accept; }'
+nft add rule ip xray prerouting fib daddr type local udp dport 53 return
+nft add rule ip xray prerouting fib daddr type local tcp dport 53 return
+nft add rule ip xray prerouting fib daddr type local tcp dport 12345 return
+nft add rule ip xray prerouting fib daddr type local udp dport 12345 return
+nft add rule ip xray prerouting ip daddr @no_tproxy return
+nft add rule ip xray prerouting meta l4proto tcp redirect to :12345
+nft add rule ip xray prerouting meta l4proto udp redirect to :12345
+
+# Locally originated traffic (e.g. other containers with network_mode: container:xray)
+# only hits OUTPUT; TPROXY there is often unsupported, so use REDIRECT to :12345.
+nft add chain ip xray output '{ type nat hook output priority dstnat; policy accept; }'
+nft add rule ip xray output meta mark "${XRAY_SO_MARK}" return
+nft add rule ip xray output ip daddr "${DNS_UPSTREAM}" udp dport 53 return
+nft add rule ip xray output fib daddr type local udp dport 53 return
+nft add rule ip xray output fib daddr type local tcp dport 53 return
+nft add rule ip xray output fib daddr type local tcp dport 12345 return
+nft add rule ip xray output fib daddr type local udp dport 12345 return
+nft add rule ip xray output ip daddr @no_tproxy return
+nft add rule ip xray output meta l4proto tcp redirect to :12345
+nft add rule ip xray output meta l4proto udp redirect to :12345
+
+nft list ruleset
 echo "============================"
 
 # ---- start Xray ----

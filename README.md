@@ -1,38 +1,31 @@
 [![Xray Core](https://img.shields.io/badge/Xray-Core-00BFFF?style=for-the-badge)](https://github.com/XTLS/Xray-core)
 [![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://www.docker.com/)
-[![SOCKS5](https://img.shields.io/badge/Proxy-SOCKS5-ff6b35?style=for-the-badge)](https://en.wikipedia.org/wiki/SOCKS)
 [![Shell](https://img.shields.io/badge/Shell-Bash-4EAA25?style=for-the-badge&logo=gnu-bash&logoColor=white)](https://www.gnu.org/software/bash/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-2ea44f?style=for-the-badge)](./LICENSE)
 
 
 
-# VLESS-to-HTTP/SOCKS5 proxy
+# VLESS transparent proxy
 
-A lightweight Dockerized **HTTP/HTTPS + SOCKS5 proxy** that forwards traffic through a **VLESS + Reality** server.
-Designed for simplicity: paste your VLESS link into `vless.conf`, run Docker, and you're done.
+A lightweight Dockerized **transparent proxy** that forwards all in network traffic
+in associated network through a **VLESS + Reality** server. Designed for simplicity:
+paste your VLESS link into `vless.conf`, run Docker, and you're done. It is used in
+a cluster with other containers that need to proxy all their traffic.
 
 ---
 
 ## ✨ Features
 - VLESS + Reality client (Xray-core)
 - Supports `tcp` and `xhttp` transports
-- HTTP proxy inbound (works for HTTP and HTTPS via CONNECT)
-- SOCKS5 proxy inbound
 - Auto-generated and printed `config.json` (easy debugging)
 - Minimal footprint, no host dependencies besides Docker
-- Default host ports: **9000** (HTTP/HTTPS) and **1080** (SOCKS5), configurable in `docker-compose.yml`
 
----
-## Related Projects
-
-- [simple-xray-core](https://github.com/thejohnd0e/simple-xray-core) — a lightweight and user-friendly script for installing and managing **Xray**.  
-  You can use it to easily set up your VLESS + Reality server, which works perfectly with **VLESS-to-HTTP**.
 ---
 
 ## 📁 Project Layout
 ```
 VLESS-to-HTTP/
-├── docker-compose.yml     # docker compose service
+├── compose.yaml           # docker compose service
 ├── Dockerfile             # image build (Xray installation)
 ├── entrypoint.sh          # parses vless.conf → generates config.json
 └── vless.conf             # your VLESS Reality URL (single line)
@@ -50,7 +43,7 @@ VLESS-to-HTTP/
 ---
 
 ## ⚙️ Configure
-Edit `vless.conf` and paste your full VLESS URL in one line:
+Add `vless.conf` and paste your full VLESS URL in one line:
 
 TCP example:
 ```bash
@@ -78,36 +71,37 @@ vless://49b4b82b-73f0-4772-86ca-ca5059375c63@45.127.127.127:443?security=reality
 
 ## 🚀 Run
 ```bash
-docker compose up -d --build
+docker compose up --build
 ```
 
 Logs (shows the generated config and Xray output):
 ```bash
-docker logs -f vless-to-http
+docker logs -f xray-proxy
 ```
-
-By default:
-- HTTP/HTTPS proxy: **http://127.0.0.1:9000**
-- SOCKS5 proxy: **socks5://127.0.0.1:1080**
 
 ---
 
 ## 🧪 Test
-HTTP proxy (HTTPS target via CONNECT):
-```bash
-curl -x http://127.0.0.1:9000 https://api.ipify.org -m 10 -v
-```
-Expected: your VLESS server's egress IP.
 
-Test plain HTTP (no TLS):
-```bash
-curl -x http://127.0.0.1:9000 http://neverssl.com -m 10 -v
-```
+To test you need to start your app container with this proxy container together.
 
-Test SOCKS5:
-```bash
-curl --socks5-hostname 127.0.0.1:1080 https://api.ipify.org -m 10 -v
+For example, you can add compose.override-proxy.yaml to your project with such
+layout:
 ```
+include:
+  - path: xray-tproxy/compose.yaml
+    project_directory: xray-tproxy
+
+services:
+  builder:
+    network_mode: "container:xray-tproxy"
+    depends_on:
+      - xray-tproxy
+```
+After that your builder service will become member of xray-tproxy container net
+and as a result, all its traffic will go through a proxy.
+
+You can find example of such layout [here](https://github.com/artyoomi/bananapi-f3-image/tree/scarthgap).
 
 ---
 
@@ -116,7 +110,7 @@ curl --socks5-hostname 127.0.0.1:1080 https://api.ipify.org -m 10 -v
 2) Restart:
 ```bash
 docker compose down
-docker compose up -d --build
+docker compose up --build
 ```
 
 ---
@@ -125,8 +119,6 @@ docker compose up -d --build
 
 - **Container restarts with code 23**
   - `vless.conf` missing or has empty/invalid mandatory parameters.
-- **HTTP returns 503**
-  - Usually your VLESS parameters are incorrect (pbk/sid/sni/flow).
 - **Container exits with `ERR: empty PATH for xhttp transport`**
   - Add `path=...` to the VLESS URL when `type=xhttp`.
 - **TLS errors during CONNECT**
