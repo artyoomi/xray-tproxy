@@ -1,8 +1,10 @@
 FROM alpine:3.20
 
 WORKDIR /app
-RUN apk add --no-cache curl unzip ca-certificates
-RUN curl -L -o /tmp/xray.zip https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip && \
+RUN apk add --no-cache curl unzip ca-certificates nftables
+
+ARG XRAY_VERSION="26.3.27"
+RUN curl -L -o /tmp/xray.zip https://github.com/XTLS/Xray-core/releases/download/v$XRAY_VERSION/Xray-linux-64.zip && \
     unzip /tmp/xray.zip -d /tmp/xray && \
     install -m755 /tmp/xray/xray /usr/local/bin/Xray && \
     mkdir -p /usr/local/share/xray && \
