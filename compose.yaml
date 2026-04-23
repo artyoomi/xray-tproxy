@@ -3,12 +3,14 @@ networks:
     driver: bridge
     ipam:
       config:
-        - subnet: 172.5.5.0/24
+        - subnet: ${SUBNET_IP}/${SUBNET_MASK}
 
 services:
   xray-tproxy:
     container_name: xray-tproxy
     build: .
+    environment:
+      - CONTAINER_IP=${CONTAINER_IP}
     cap_add:
       - NET_ADMIN
     sysctls:
@@ -18,5 +20,5 @@ services:
       - ./vless.conf:/app/vless.conf:ro
     networks:
       tproxy-net:
-        ipv4_address: 172.5.5.2
+        ipv4_address: ${CONTAINER_IP}
     restart: unless-stopped
