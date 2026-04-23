@@ -213,10 +213,22 @@ nft delete table ip xray 2>/dev/null || true
 nft add table ip xray
 
 # Destinations that must not be redirected (loopback + VLESS server).
-nft add set ip xray no_tproxy '{ type ipv4_addr; flags interval; elements = { 127.0.0.0/8 } }'
 for _ip in $(getent ahosts "$SERVER" 2>/dev/null | awk '$1 ~ /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/ { print $1 }' | sort -u); do
   nft add element ip xray no_tproxy "{ $_ip }" 2>/dev/null || true
 done
+
+# RFC 1918 private addresses
+nft add set ip xray no_tproxy '{ type ipv4_addr; flags interval; elements = {
+    10.0.0.0/8,
+    127.0.0.0/8,
+    169.254.0.0/16,
+    172.16.0.0/12,
+    192.168.0.0/16,
+    224.0.0.0/4,
+    240.0.0.0/4
+} }'
+nft add element ip xray no_tproxy "{ ${CONTAINER_IP} }"
+
 
 # Ingress (published ports, forwarded) — same exclusions as output.
 nft add chain ip xray prerouting '{ type nat hook prerouting priority dstnat; policy accept; }'
